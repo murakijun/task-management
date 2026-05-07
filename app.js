@@ -18,7 +18,7 @@ function saveTasks(tasks) {
 let tasks = loadTasks();
 let editingId = null;
 let deleteTargetId = null;
-let activeStatusFilter = '';
+let activeStatusFilter = new Set();
 
 /* ===== DOM要素 ===== */
 const taskList       = document.getElementById('taskList');
@@ -83,7 +83,7 @@ function updateAssigneeFilter() {
 /* ===== フィルタ・ソート適用 ===== */
 function getFilteredTasks() {
   const query    = searchInput.value.trim().toLowerCase();
-  const status   = activeStatusFilter || filterStatus.value;
+  const statusSelect = activeStatusFilter.size === 0 ? filterStatus.value : '';
   const priority = filterPriority.value;
   const assignee = filterAssignee.value;
   const sort     = sortOrder.value;
@@ -94,7 +94,8 @@ function getFilteredTasks() {
       (t.assignee || '').toLowerCase().includes(query) ||
       (t.description || '').toLowerCase().includes(query)
     )) return false;
-    if (status   && t.status   !== status)   return false;
+    if (activeStatusFilter.size > 0 && !activeStatusFilter.has(t.status)) return false;
+    if (statusSelect && t.status !== statusSelect) return false;
     if (priority && t.priority !== priority) return false;
     if (assignee && t.assignee !== assignee) return false;
     return true;
@@ -131,7 +132,12 @@ function updateSummary() {
   document.getElementById('countDone').textContent      = tasks.filter(t => t.status === '完了').length;
 
   document.querySelectorAll('.summary-card').forEach(card => {
-    card.classList.toggle('active', card.dataset.status === activeStatusFilter);
+    const s = card.dataset.status;
+    if (s === '') {
+      card.classList.toggle('active', activeStatusFilter.size === 0 && !filterStatus.value);
+    } else {
+      card.classList.toggle('active', activeStatusFilter.has(s));
+    }
   });
 }
 
@@ -213,6 +219,7 @@ function openAddModal() {
   taskForm.reset();
   progressValue.textContent = '0';
   progressInput.value = 0;
+  progressInput.disabled = false;
   modalTitle.textContent = '新規作業を追加';
   submitBtn.textContent = '登録する';
   modalOverlay.classList.add('open');
@@ -233,6 +240,7 @@ function openEditModal(id) {
   document.getElementById('taskNotes').value        = task.notes || '';
   progressInput.value                               = task.progress || 0;
   progressValue.textContent                         = task.progress || 0;
+  applyStatusToProgress(task.status);
 
   modalTitle.textContent = '作業を編集';
   submitBtn.textContent  = '更新する';
@@ -349,20 +357,47 @@ progressInput.addEventListener('input', () => {
   progressValue.textContent = progressInput.value;
 });
 
-// フィルター・検索
-[searchInput, filterStatus, filterPriority, filterAssignee, sortOrder].forEach(el => {
-  el.addEventListener('input', render);
-  el.addEventListener('change', render);
+// ステータス変更で進捗を自動制御
+const taskStatusSelect = document.getElementById('taskStatus');
+function applyStatusToProgress(status) {
+  if (status === '未実施') {
+    progressInput.value = 0;
+    progressValue.textContent = '0';
+    progressInput.disabled = true;
+  } else if (status === '完了') {
+    progressInput.value = 100;
+    progressValue.textContent = '100';
+    progressInput.disabled = true;
+  } else {
+    progressInput.disabled = false;
+  }
+}
+taskStatusSelect.addEventListener('change', () => {
+  applyStatusToProgress(taskStatusSelect.value);
 });
 
-// サマリーカードでフィルタ
+// フィルター・検索
+[searchInput, filterStatus, filterPriority, filterAssignee, sortOrder].forEach(el => {
+  el.addEventListener('input', () => {
+    if (el === filterStatus) activeStatusFilter.clear();
+    render();
+  });
+  el.addEventListener('change', () => {
+    if (el === filterStatus) activeStatusFilter.clear();
+    render();
+  });
+});
+
+// サマリーカードでフィルタ（複数選択対応）
 document.querySelectorAll('.summary-card').forEach(card => {
   card.addEventListener('click', () => {
     const status = card.dataset.status;
-    if (activeStatusFilter === status) {
-      activeStatusFilter = '';
+    if (status === '') {
+      activeStatusFilter.clear();
+    } else if (activeStatusFilter.has(status)) {
+      activeStatusFilter.delete(status);
     } else {
-      activeStatusFilter = status;
+      activeStatusFilter.add(status);
     }
     filterStatus.value = '';
     render();
