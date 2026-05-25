@@ -621,14 +621,24 @@ const rtRepeatType            = document.getElementById('rtRepeatType');
 const rtRepeatValueWrap       = document.getElementById('rtRepeatValueWrap');
 const rtRepeatValueLabel      = document.getElementById('rtRepeatValueLabel');
 const rtRepeatValue           = document.getElementById('rtRepeatValue');
+const rtSubmitBtn             = document.getElementById('rtSubmitBtn');
+
+let editingTemplateId = null;
+
+function resetRecurringForm() {
+  editingTemplateId = null;
+  recurringForm.reset();
+  document.getElementById('rtAdvanceDays').value = 3;
+  rtRepeatValueWrap.style.display = 'none';
+  rtSubmitBtn.textContent = 'テンプレートを登録';
+  toggleRecurringFormBtn.style.display = '';
+}
 
 function openRecurring() {
   renderRecurringList();
   recurringFormWrap.style.display = 'none';
   toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
-  recurringForm.reset();
-  document.getElementById('rtAdvanceDays').value = 3;
-  rtRepeatValueWrap.style.display = 'none';
+  resetRecurringForm();
   recurringOverlay.classList.add('open');
 }
 
@@ -666,21 +676,22 @@ function renderRecurringList() {
           <span>🔄 ${repeatTypeLabel(tmpl)}</span>
           <span>⏰ ${tmpl.advanceDays}日前に生成</span>
         </div>
+        <button class="action-btn edit" onclick="openEditTemplate('${tmpl.id}')">編集</button>
         <button class="action-btn delete" onclick="deleteTemplate('${tmpl.id}')">削除</button>
       </div>
     `;
   }).join('');
 }
 
-function addTemplate(e) {
+function saveTemplate(e) {
   e.preventDefault();
-  const title      = document.getElementById('rtTitle').value.trim();
-  const priority   = document.getElementById('rtPriority').value;
-  const assignee   = document.getElementById('rtAssignee').value.trim();
-  const status     = document.getElementById('rtStatus').value;
-  const repeatType = rtRepeatType.value;
+  const title       = document.getElementById('rtTitle').value.trim();
+  const priority    = document.getElementById('rtPriority').value;
+  const assignee    = document.getElementById('rtAssignee').value.trim();
+  const status      = document.getElementById('rtStatus').value;
+  const repeatType  = rtRepeatType.value;
   const advanceDays = parseInt(document.getElementById('rtAdvanceDays').value, 10);
-  const desc       = document.getElementById('rtDescription').value.trim();
+  const desc        = document.getElementById('rtDescription').value.trim();
 
   if (!title || !priority || !assignee || !repeatType) return;
 
@@ -692,23 +703,32 @@ function addTemplate(e) {
   }
 
   const templates = loadRecurringTemplates();
-  templates.push({
-    id:                   generateId(),
-    title,
-    priority,
-    assignee,
-    status,
-    description:          desc,
-    repeatType,
-    repeatValue,
-    advanceDays:          isNaN(advanceDays) ? 3 : advanceDays,
-    lastGeneratedPeriod:  '',
-  });
+
+  if (editingTemplateId) {
+    const idx = templates.findIndex(t => t.id === editingTemplateId);
+    if (idx !== -1) {
+      templates[idx] = {
+        ...templates[idx],
+        title, priority, assignee, status,
+        description: desc,
+        repeatType, repeatValue,
+        advanceDays: isNaN(advanceDays) ? 3 : advanceDays,
+      };
+    }
+  } else {
+    templates.push({
+      id:                  generateId(),
+      title, priority, assignee, status,
+      description:         desc,
+      repeatType, repeatValue,
+      advanceDays:         isNaN(advanceDays) ? 3 : advanceDays,
+      lastGeneratedPeriod: '',
+    });
+  }
+
   saveRecurringTemplates(templates);
 
-  recurringForm.reset();
-  document.getElementById('rtAdvanceDays').value = 3;
-  rtRepeatValueWrap.style.display = 'none';
+  resetRecurringForm();
   recurringFormWrap.style.display = 'none';
   toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
   renderRecurringList();
@@ -722,8 +742,7 @@ function deleteTemplate(id) {
 }
 
 // 繰り返しタイプに応じてrepeatValueフィールドを切替
-rtRepeatType.addEventListener('change', () => {
-  const type = rtRepeatType.value;
+function updateRepeatValueField(type, selectedValue = null) {
   rtRepeatValue.innerHTML = '';
   if (type === 'monthly_day') {
     rtRepeatValueLabel.textContent = '日付（1〜28日）';
@@ -731,6 +750,7 @@ rtRepeatType.addEventListener('change', () => {
       const opt = document.createElement('option');
       opt.value = d;
       opt.textContent = `${d}日`;
+      if (selectedValue !== null && d === parseInt(selectedValue, 10)) opt.selected = true;
       rtRepeatValue.appendChild(opt);
     }
     rtRepeatValueWrap.style.display = 'flex';
@@ -740,13 +760,40 @@ rtRepeatType.addEventListener('change', () => {
       const opt = document.createElement('option');
       opt.value = i;
       opt.textContent = label;
+      if (selectedValue !== null && i === parseInt(selectedValue, 10)) opt.selected = true;
       rtRepeatValue.appendChild(opt);
     });
     rtRepeatValueWrap.style.display = 'flex';
   } else {
     rtRepeatValueWrap.style.display = 'none';
   }
+}
+
+rtRepeatType.addEventListener('change', () => {
+  updateRepeatValueField(rtRepeatType.value);
 });
+
+function openEditTemplate(id) {
+  const templates = loadRecurringTemplates();
+  const tmpl = templates.find(t => t.id === id);
+  if (!tmpl) return;
+
+  editingTemplateId = id;
+
+  document.getElementById('rtTitle').value       = tmpl.title;
+  document.getElementById('rtPriority').value    = tmpl.priority;
+  document.getElementById('rtAssignee').value    = tmpl.assignee || '';
+  document.getElementById('rtStatus').value      = tmpl.status || '未実施';
+  document.getElementById('rtAdvanceDays').value = tmpl.advanceDays ?? 3;
+  document.getElementById('rtDescription').value = tmpl.description || '';
+  rtRepeatType.value = tmpl.repeatType;
+  updateRepeatValueField(tmpl.repeatType, tmpl.repeatValue);
+
+  rtSubmitBtn.textContent = 'テンプレートを更新';
+  toggleRecurringFormBtn.style.display = 'none';
+  recurringFormWrap.style.display = 'block';
+  recurringFormWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
 openRecurringBtn.addEventListener('click', openRecurring);
 recurringClose.addEventListener('click', closeRecurring);
@@ -759,13 +806,12 @@ toggleRecurringFormBtn.addEventListener('click', () => {
 });
 
 cancelRecurringFormBtn.addEventListener('click', () => {
+  resetRecurringForm();
   recurringFormWrap.style.display = 'none';
   toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
-  recurringForm.reset();
-  rtRepeatValueWrap.style.display = 'none';
 });
 
-recurringForm.addEventListener('submit', addTemplate);
+recurringForm.addEventListener('submit', saveTemplate);
 
 /* ===== キーボードショートカット ===== */
 document.addEventListener('keydown', e => {
