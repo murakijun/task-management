@@ -15,9 +15,14 @@
           <span class="logo-icon">📋</span>
           作業管理システム
         </h1>
-        <button class="btn btn-primary" id="openModalBtn">
-          ＋ 新規作業を追加
-        </button>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-secondary" id="openRecurringBtn">
+            🔄 定期作業
+          </button>
+          <button class="btn btn-primary" id="openModalBtn">
+            ＋ 新規作業を追加
+          </button>
+        </div>
       </div>
     </header>
 
@@ -197,6 +202,98 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" id="deleteCancelBtn">キャンセル</button>
           <button type="button" class="btn btn-danger" id="deleteConfirmBtn">削除する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 定期作業管理モーダル -->
+  <div class="modal-overlay" id="recurringOverlay">
+    <div class="modal modal-recurring">
+      <div class="modal-header">
+        <h2 class="modal-title">🔄 定期作業テンプレート</h2>
+        <button class="modal-close" id="recurringClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- テンプレート一覧 -->
+        <div class="recurring-list" id="recurringList">
+          <!-- テンプレートがここに挿入される -->
+        </div>
+        <div class="recurring-empty" id="recurringEmpty" style="display:none;">
+          <p>テンプレートが登録されていません</p>
+        </div>
+
+        <!-- 追加フォームトグル -->
+        <div style="margin-top:16px;">
+          <button class="btn btn-secondary" id="toggleRecurringFormBtn" style="width:100%;">＋ テンプレートを追加</button>
+        </div>
+
+        <div id="recurringFormWrap" style="display:none;">
+          <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+            <form id="recurringForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label required">作業内容</label>
+                  <input type="text" id="rtTitle" class="form-input" placeholder="作業内容を入力..." required>
+                </div>
+              </div>
+
+              <div class="form-row form-row-3">
+                <div class="form-group">
+                  <label class="form-label required">優先度</label>
+                  <select id="rtPriority" class="form-select" required>
+                    <option value="">選択</option>
+                    <option value="高">🔴 高</option>
+                    <option value="中">🟡 中</option>
+                    <option value="低">🟢 低</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label required">担当者</label>
+                  <input type="text" id="rtAssignee" class="form-input" placeholder="担当者名" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">初期ステータス</label>
+                  <select id="rtStatus" class="form-select">
+                    <option value="未実施">未実施</option>
+                    <option value="進行中">進行中</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row form-row-3">
+                <div class="form-group">
+                  <label class="form-label required">繰り返しタイプ</label>
+                  <select id="rtRepeatType" class="form-select" required>
+                    <option value="">選択</option>
+                    <option value="monthly_end">毎月末</option>
+                    <option value="monthly_day">毎月X日</option>
+                    <option value="weekly">毎週X曜日</option>
+                  </select>
+                </div>
+                <div class="form-group" id="rtRepeatValueWrap" style="display:none;">
+                  <label class="form-label required" id="rtRepeatValueLabel">繰り返し値</label>
+                  <select id="rtRepeatValue" class="form-select"></select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label required">何日前に生成</label>
+                  <input type="number" id="rtAdvanceDays" class="form-input" value="3" min="0" max="30" required>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">説明（任意）</label>
+                  <textarea id="rtDescription" class="form-textarea" rows="2" placeholder="作業の詳細説明..."></textarea>
+                </div>
+              </div>
+
+              <div class="modal-footer" style="margin-top:0;">
+                <button type="button" class="btn btn-secondary" id="cancelRecurringFormBtn">キャンセル</button>
+                <button type="submit" class="btn btn-primary">テンプレートを登録</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

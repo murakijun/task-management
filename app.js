@@ -1,7 +1,8 @@
 'use strict';
 
 /* ===== データ管理 ===== */
-const STORAGE_KEY = 'task_management_data';
+const STORAGE_KEY   = 'task_management_data';
+const RECURRING_KEY = 'recurring_task_templates';
 
 function loadTasks() {
   try {
@@ -13,6 +14,18 @@ function loadTasks() {
 
 function saveTasks(tasks) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+function loadRecurringTemplates() {
+  try {
+    return JSON.parse(localStorage.getItem(RECURRING_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecurringTemplates(templates) {
+  localStorage.setItem(RECURRING_KEY, JSON.stringify(templates));
 }
 
 let tasks = loadTasks();
@@ -49,6 +62,103 @@ const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
 /* ===== ユーティリティ ===== */
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function getLastDayOfMonth(year, month) {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+// ISO週番号（月曜始まり）
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function padTwo(n) {
+  return String(n).padStart(2, '0');
+}
+
+/* ===== 定期作業の自動生成 ===== */
+function checkAndGenerateRecurringTasks() {
+  const templates = loadRecurringTemplates();
+  if (templates.length === 0) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const year  = today.getFullYear();
+  const month = today.getMonth(); // 0-indexed
+  const day   = today.getDate();
+  const dow   = today.getDay(); // 0=日
+
+  const currentYM = `${year}-${padTwo(month + 1)}`;
+  const currentWW = `${year}-${padTwo(getWeekNumber(today))}`;
+
+  let changed = false;
+  let tasksChanged = false;
+
+  templates.forEach(tmpl => {
+    let shouldGenerate = false;
+    let deadlineStr    = '';
+    let period         = '';
+
+    if (tmpl.repeatType === 'monthly_end') {
+      const lastDay = getLastDayOfMonth(year, month);
+      period = currentYM;
+      const triggerDay = lastDay - (tmpl.advanceDays || 0);
+      shouldGenerate = day >= triggerDay && tmpl.lastGeneratedPeriod !== period;
+      const dd = String(lastDay).padStart(2, '0');
+      deadlineStr = `${year}-${padTwo(month + 1)}-${dd}`;
+
+    } else if (tmpl.repeatType === 'monthly_day') {
+      const targetDay = parseInt(tmpl.repeatValue, 10);
+      period = currentYM;
+      const triggerDay = targetDay - (tmpl.advanceDays || 0);
+      shouldGenerate = day >= triggerDay && tmpl.lastGeneratedPeriod !== period;
+      const maxDay = getLastDayOfMonth(year, month);
+      const actualDay = Math.min(targetDay, maxDay);
+      deadlineStr = `${year}-${padTwo(month + 1)}-${padTwo(actualDay)}`;
+
+    } else if (tmpl.repeatType === 'weekly') {
+      const targetDow  = parseInt(tmpl.repeatValue, 10); // 0=日
+      const advanceDays = tmpl.advanceDays || 0;
+      // 対象曜日のX日前の曜日に生成トリガー
+      const triggerDow = ((targetDow - advanceDays) % 7 + 7) % 7;
+      period = currentWW;
+      shouldGenerate = dow === triggerDow && tmpl.lastGeneratedPeriod !== period;
+      // 期限 = 次のtargetDow（今日がtriggerDowなので今日+advanceDays後）
+      const daysUntilTarget = ((targetDow - dow) + 7) % 7 || (dow === targetDow ? 0 : 7);
+      const deadlineDate = new Date(today);
+      deadlineDate.setDate(today.getDate() + daysUntilTarget);
+      deadlineStr = `${deadlineDate.getFullYear()}-${padTwo(deadlineDate.getMonth()+1)}-${padTwo(deadlineDate.getDate())}`;
+    }
+
+    if (shouldGenerate) {
+      const now = Date.now();
+      tasks.push({
+        id:            generateId(),
+        title:         tmpl.title,
+        priority:      tmpl.priority,
+        deadline:      deadlineStr,
+        status:        tmpl.status || '未実施',
+        assignee:      tmpl.assignee || '',
+        description:   tmpl.description || '',
+        notes:         '',
+        progress:      0,
+        createdAt:     now,
+        updatedAt:     now,
+        fromRecurring: tmpl.id,
+      });
+      tmpl.lastGeneratedPeriod = period;
+      tasksChanged = true;
+      changed      = true;
+    }
+  });
+
+  if (changed) saveRecurringTemplates(templates);
+  if (tasksChanged) saveTasks(tasks);
 }
 
 /* ===== 古い完了タスクを自動削除（完了から2ヶ月経過） ===== */
@@ -497,12 +607,173 @@ deleteConfirmBtn.addEventListener('click', () => {
   render();
 });
 
+/* ===== 定期作業モーダル ===== */
+const recurringOverlay        = document.getElementById('recurringOverlay');
+const recurringClose          = document.getElementById('recurringClose');
+const openRecurringBtn        = document.getElementById('openRecurringBtn');
+const recurringList           = document.getElementById('recurringList');
+const recurringEmpty          = document.getElementById('recurringEmpty');
+const toggleRecurringFormBtn  = document.getElementById('toggleRecurringFormBtn');
+const recurringFormWrap       = document.getElementById('recurringFormWrap');
+const cancelRecurringFormBtn  = document.getElementById('cancelRecurringFormBtn');
+const recurringForm           = document.getElementById('recurringForm');
+const rtRepeatType            = document.getElementById('rtRepeatType');
+const rtRepeatValueWrap       = document.getElementById('rtRepeatValueWrap');
+const rtRepeatValueLabel      = document.getElementById('rtRepeatValueLabel');
+const rtRepeatValue           = document.getElementById('rtRepeatValue');
+
+function openRecurring() {
+  renderRecurringList();
+  recurringFormWrap.style.display = 'none';
+  toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
+  recurringForm.reset();
+  document.getElementById('rtAdvanceDays').value = 3;
+  rtRepeatValueWrap.style.display = 'none';
+  recurringOverlay.classList.add('open');
+}
+
+function closeRecurring() {
+  recurringOverlay.classList.remove('open');
+}
+
+const WEEK_LABELS = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+
+function repeatTypeLabel(tmpl) {
+  if (tmpl.repeatType === 'monthly_end') return '毎月末';
+  if (tmpl.repeatType === 'monthly_day') return `毎月 ${tmpl.repeatValue} 日`;
+  if (tmpl.repeatType === 'weekly') return `毎週 ${WEEK_LABELS[tmpl.repeatValue]}`;
+  return '';
+}
+
+function renderRecurringList() {
+  const templates = loadRecurringTemplates();
+  if (templates.length === 0) {
+    recurringList.innerHTML = '';
+    recurringEmpty.style.display = 'block';
+    return;
+  }
+  recurringEmpty.style.display = 'none';
+  recurringList.innerHTML = templates.map(tmpl => {
+    const priorityEmoji = tmpl.priority === '高' ? '🔴' : tmpl.priority === '中' ? '🟡' : '🟢';
+    return `
+      <div class="recurring-item">
+        <div class="recurring-item-main">
+          <span class="recurring-item-title">${escapeHTML(tmpl.title)}</span>
+          <span class="badge badge-priority-${tmpl.priority === '高' ? 'high' : tmpl.priority === '中' ? 'mid' : 'low'}">${priorityEmoji} ${tmpl.priority}</span>
+        </div>
+        <div class="recurring-item-meta">
+          <span>👤 ${escapeHTML(tmpl.assignee || '未設定')}</span>
+          <span>🔄 ${repeatTypeLabel(tmpl)}</span>
+          <span>⏰ ${tmpl.advanceDays}日前に生成</span>
+        </div>
+        <button class="action-btn delete" onclick="deleteTemplate('${tmpl.id}')">削除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function addTemplate(e) {
+  e.preventDefault();
+  const title      = document.getElementById('rtTitle').value.trim();
+  const priority   = document.getElementById('rtPriority').value;
+  const assignee   = document.getElementById('rtAssignee').value.trim();
+  const status     = document.getElementById('rtStatus').value;
+  const repeatType = rtRepeatType.value;
+  const advanceDays = parseInt(document.getElementById('rtAdvanceDays').value, 10);
+  const desc       = document.getElementById('rtDescription').value.trim();
+
+  if (!title || !priority || !assignee || !repeatType) return;
+
+  let repeatValue = null;
+  if (repeatType === 'monthly_day' || repeatType === 'weekly') {
+    repeatValue = rtRepeatValue.value;
+    if (repeatValue === '') return;
+    repeatValue = parseInt(repeatValue, 10);
+  }
+
+  const templates = loadRecurringTemplates();
+  templates.push({
+    id:                   generateId(),
+    title,
+    priority,
+    assignee,
+    status,
+    description:          desc,
+    repeatType,
+    repeatValue,
+    advanceDays:          isNaN(advanceDays) ? 3 : advanceDays,
+    lastGeneratedPeriod:  '',
+  });
+  saveRecurringTemplates(templates);
+
+  recurringForm.reset();
+  document.getElementById('rtAdvanceDays').value = 3;
+  rtRepeatValueWrap.style.display = 'none';
+  recurringFormWrap.style.display = 'none';
+  toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
+  renderRecurringList();
+}
+
+function deleteTemplate(id) {
+  let templates = loadRecurringTemplates();
+  templates = templates.filter(t => t.id !== id);
+  saveRecurringTemplates(templates);
+  renderRecurringList();
+}
+
+// 繰り返しタイプに応じてrepeatValueフィールドを切替
+rtRepeatType.addEventListener('change', () => {
+  const type = rtRepeatType.value;
+  rtRepeatValue.innerHTML = '';
+  if (type === 'monthly_day') {
+    rtRepeatValueLabel.textContent = '日付（1〜28日）';
+    for (let d = 1; d <= 28; d++) {
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = `${d}日`;
+      rtRepeatValue.appendChild(opt);
+    }
+    rtRepeatValueWrap.style.display = 'flex';
+  } else if (type === 'weekly') {
+    rtRepeatValueLabel.textContent = '曜日';
+    WEEK_LABELS.forEach((label, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = label;
+      rtRepeatValue.appendChild(opt);
+    });
+    rtRepeatValueWrap.style.display = 'flex';
+  } else {
+    rtRepeatValueWrap.style.display = 'none';
+  }
+});
+
+openRecurringBtn.addEventListener('click', openRecurring);
+recurringClose.addEventListener('click', closeRecurring);
+recurringOverlay.addEventListener('click', e => { if (e.target === recurringOverlay) closeRecurring(); });
+
+toggleRecurringFormBtn.addEventListener('click', () => {
+  const isOpen = recurringFormWrap.style.display !== 'none';
+  recurringFormWrap.style.display = isOpen ? 'none' : 'block';
+  toggleRecurringFormBtn.textContent = isOpen ? '＋ テンプレートを追加' : '▲ 閉じる';
+});
+
+cancelRecurringFormBtn.addEventListener('click', () => {
+  recurringFormWrap.style.display = 'none';
+  toggleRecurringFormBtn.textContent = '＋ テンプレートを追加';
+  recurringForm.reset();
+  rtRepeatValueWrap.style.display = 'none';
+});
+
+recurringForm.addEventListener('submit', addTemplate);
+
 /* ===== キーボードショートカット ===== */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (deleteOverlay.classList.contains('open')) closeDeleteConfirm();
     else if (detailOverlay.classList.contains('open')) closeDetail();
     else if (modalOverlay.classList.contains('open')) closeModal();
+    else if (recurringOverlay.classList.contains('open')) closeRecurring();
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
     e.preventDefault();
@@ -511,5 +782,6 @@ document.addEventListener('keydown', e => {
 });
 
 /* ===== 初期描画 ===== */
+checkAndGenerateRecurringTasks();
 removeOldCompletedTasks();
 render();
