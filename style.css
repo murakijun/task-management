@@ -219,13 +219,30 @@ body {
 }
 .summary-card.active {
   border-color: var(--primary);
+  background: #eef2ff;
   box-shadow: 0 0 0 3px rgba(79,70,229,.15);
+}
+.summary-card.active .summary-label::after {
+  content: ' ▲';
+  font-size: 9px;
+  vertical-align: middle;
+  color: var(--primary);
 }
 
 .summary-card.status-pending  { border-color: var(--pending-border); }
 .summary-card.status-inprogress { border-color: var(--inprogress-border); }
 .summary-card.status-hold     { border-color: var(--hold-border); }
 .summary-card.status-done     { border-color: var(--done-border); }
+
+.summary-card.status-pending.active  { background: var(--pending-bg);    border-color: var(--pending-text);    box-shadow: 0 0 0 3px rgba(252,211,77,.25); }
+.summary-card.status-inprogress.active { background: var(--inprogress-bg); border-color: var(--inprogress-text); box-shadow: 0 0 0 3px rgba(147,197,253,.35); }
+.summary-card.status-hold.active     { background: var(--hold-bg);       border-color: var(--hold-text);       box-shadow: 0 0 0 3px rgba(196,181,253,.35); }
+.summary-card.status-done.active     { background: var(--done-bg);       border-color: var(--done-text);       box-shadow: 0 0 0 3px rgba(134,239,172,.35); }
+
+.summary-card.status-pending.active  .summary-label::after { color: var(--pending-text); }
+.summary-card.status-inprogress.active .summary-label::after { color: var(--inprogress-text); }
+.summary-card.status-hold.active     .summary-label::after { color: var(--hold-text); }
+.summary-card.status-done.active     .summary-label::after { color: var(--done-text); }
 
 .summary-number {
   font-size: 2rem;
@@ -254,53 +271,58 @@ body {
 
 /* ===== タスクカード ===== */
 .task-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .task-card {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
   box-shadow: var(--shadow);
   overflow: hidden;
   transition: all var(--transition);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   cursor: pointer;
 }
 .task-card:hover {
-  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+  border-color: #cbd5e1;
 }
 .task-card.is-done {
-  opacity: 0.7;
+  opacity: 0.65;
 }
 
-.task-card-top {
-  padding: 16px 16px 12px;
-  border-left: 4px solid var(--border);
+.task-card.priority-high { border-left-color: #ef4444; }
+.task-card.priority-mid  { border-left-color: #f59e0b; }
+.task-card.priority-low  { border-left-color: #22c55e; }
+
+/* メイン情報エリア（横長・左側） */
+.task-card-main {
   flex: 1;
+  padding: 12px 16px;
+  min-width: 0;
+  cursor: pointer;
 }
-.task-card.priority-high  .task-card-top { border-left-color: #ef4444; }
-.task-card.priority-mid   .task-card-top { border-left-color: #f59e0b; }
-.task-card.priority-low   .task-card-top { border-left-color: #22c55e; }
 
-.task-card-header {
+.task-card-title-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
 .task-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
-  flex: 1;
   line-height: 1.4;
+  flex-shrink: 0;
 }
 .task-card.is-done .task-title {
   text-decoration: line-through;
@@ -309,7 +331,7 @@ body {
 
 .task-badges {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   flex-shrink: 0;
 }
@@ -317,7 +339,7 @@ body {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 2px 8px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 700;
@@ -337,44 +359,40 @@ body {
   flex-wrap: wrap;
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 10px;
 }
 .task-meta-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  white-space: nowrap;
 }
 .task-meta-item.overdue {
   color: #dc2626;
   font-weight: 600;
 }
-
-.task-description {
-  font-size: 13px;
-  color: var(--text-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.task-desc-preview {
+  color: var(--text-light);
   overflow: hidden;
-  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
 }
 
-/* プログレスバー */
-.task-card-bottom {
-  padding: 10px 16px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.progress-wrap {
+/* プログレスバー（中央エリア） */
+.task-card-progress {
+  width: 160px;
+  flex-shrink: 0;
+  padding: 0 16px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  border-left: 1px solid var(--border);
+  align-self: stretch;
 }
 
 .progress-bar-track {
   flex: 1;
-  height: 8px;
+  height: 7px;
   background: var(--border);
   border-radius: 99px;
   overflow: hidden;
@@ -397,16 +415,19 @@ body {
 }
 .progress-pct.full { color: #16a34a; }
 
-/* アクションボタン */
+/* アクションボタン（右端エリア） */
 .task-actions {
-  padding: 0 12px 12px;
+  padding: 0 12px;
+  flex-shrink: 0;
   display: flex;
   gap: 6px;
-  justify-content: flex-end;
+  align-items: center;
+  align-self: stretch;
+  border-left: 1px solid var(--border);
 }
 
 .action-btn {
-  padding: 5px 12px;
+  padding: 5px 10px;
   font-size: 12px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -416,6 +437,7 @@ body {
   font-family: inherit;
   font-weight: 600;
   transition: all var(--transition);
+  white-space: nowrap;
 }
 .action-btn:hover {
   background: var(--bg);
@@ -435,6 +457,32 @@ body {
   background: #fee2e2;
   border-color: #fca5a5;
   color: var(--danger);
+}
+
+/* ===== 完了タスク区切り線 ===== */
+.done-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 8px;
+  color: var(--done-text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.done-divider::before,
+.done-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--done-border);
+}
+.done-divider span {
+  white-space: nowrap;
+  background: var(--done-bg);
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--done-border);
 }
 
 /* ===== 空状態 ===== */
@@ -633,11 +681,19 @@ body {
 /* ===== レスポンシブ ===== */
 @media (max-width: 768px) {
   .summary-grid { grid-template-columns: repeat(3, 1fr); }
-  .task-list { grid-template-columns: 1fr; }
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
   .detail-grid { grid-template-columns: 1fr; }
   .filter-bar-inner { flex-direction: column; align-items: stretch; }
   .filters { flex-direction: column; }
+  .task-card-progress { width: 120px; }
+  .task-desc-preview { display: none; }
+}
+
+@media (max-width: 600px) {
+  .task-card { flex-wrap: wrap; }
+  .task-card-main { width: 100%; border-bottom: 1px solid var(--border); }
+  .task-card-progress { width: auto; flex: 1; border-left: none; border-top: none; align-self: auto; padding: 8px 12px; }
+  .task-actions { border-left: 1px solid var(--border); align-self: auto; padding: 8px 10px; }
 }
 
 @media (max-width: 480px) {

@@ -51,6 +51,18 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+/* ===== 古い完了タスクを自動削除（完了から2ヶ月経過） ===== */
+function removeOldCompletedTasks() {
+  const twoMonthsAgo = Date.now() - (60 * 24 * 60 * 60 * 1000);
+  const before = tasks.length;
+  tasks = tasks.filter(t => {
+    if (t.status !== '完了') return true;
+    const doneAt = t.completedAt || t.updatedAt;
+    return doneAt > twoMonthsAgo;
+  });
+  if (tasks.length !== before) saveTasks(tasks);
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr + 'T00:00:00');
@@ -150,15 +162,18 @@ function createCardHTML(task) {
   const isDone        = task.status === '完了';
   const progress      = task.progress || 0;
   const isFull        = progress >= 100;
+  const descPreview   = task.description
+    ? escapeHTML(task.description.slice(0, 50)) + (task.description.length > 50 ? '…' : '')
+    : null;
 
   return `
     <div class="task-card priority-${priorityClass}${isDone ? ' is-done' : ''}" data-id="${task.id}">
-      <div class="task-card-top" onclick="openDetail('${task.id}')">
-        <div class="task-card-header">
+      <div class="task-card-main" onclick="openDetail('${task.id}')">
+        <div class="task-card-title-row">
           <div class="task-title">${escapeHTML(task.title)}</div>
           <div class="task-badges">
-            <span class="badge badge-priority-${priorityClass}">${priorityEmoji} ${task.priority}</span>
             <span class="badge badge-status-${task.status}">${task.status}</span>
+            <span class="badge badge-priority-${priorityClass}">${priorityEmoji} ${task.priority}</span>
           </div>
         </div>
         <div class="task-meta">
@@ -167,18 +182,14 @@ function createCardHTML(task) {
             ? `<span class="task-meta-item${overdue ? ' overdue' : ''}">📅 ${deadlineStr}${overdue ? ' ⚠️期限超過' : ''}</span>`
             : ''}
           <span class="task-meta-item">🕐 ${formatDate(new Date(task.createdAt).toISOString().slice(0,10))}</span>
+          ${descPreview ? `<span class="task-meta-item task-desc-preview">📝 ${descPreview}</span>` : ''}
         </div>
-        ${task.description
-          ? `<div class="task-description">${escapeHTML(task.description)}</div>`
-          : ''}
       </div>
-      <div class="task-card-bottom">
-        <div class="progress-wrap">
-          <div class="progress-bar-track">
-            <div class="progress-bar-fill${isFull ? ' full' : ''}" style="width:${progress}%"></div>
-          </div>
-          <span class="progress-pct${isFull ? ' full' : ''}">${progress}%</span>
+      <div class="task-card-progress">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill${isFull ? ' full' : ''}" style="width:${progress}%"></div>
         </div>
+        <span class="progress-pct${isFull ? ' full' : ''}">${progress}%</span>
       </div>
       <div class="task-actions">
         <button class="action-btn edit" onclick="openEditModal('${task.id}'); event.stopPropagation();">編集</button>
@@ -210,7 +221,16 @@ function render() {
     return;
   }
   emptyState.style.display = 'none';
-  taskList.innerHTML = filtered.map(createCardHTML).join('');
+
+  const active = filtered.filter(t => t.status !== '完了');
+  const done   = filtered.filter(t => t.status === '完了');
+
+  let html = active.map(createCardHTML).join('');
+  if (done.length > 0) {
+    html += `<div class="done-divider"><span>✅ 完了済み（${done.length}件）</span></div>`;
+    html += done.map(createCardHTML).join('');
+  }
+  taskList.innerHTML = html;
 }
 
 /* ===== モーダル開閉 ===== */
@@ -424,11 +444,14 @@ taskForm.addEventListener('submit', e => {
   if (editingId) {
     const idx = tasks.findIndex(t => t.id === editingId);
     if (idx !== -1) {
+      const wasDone = tasks[idx].status === '完了';
+      const becomingDone = status === '完了';
       tasks[idx] = {
         ...tasks[idx],
         title, priority, deadline, status, assignee,
         description: desc, notes, progress,
         updatedAt: now,
+        completedAt: becomingDone ? (wasDone ? tasks[idx].completedAt : now) : undefined,
       };
     }
   } else {
@@ -438,6 +461,7 @@ taskForm.addEventListener('submit', e => {
       description: desc, notes, progress,
       createdAt: now,
       updatedAt: now,
+      completedAt: status === '完了' ? now : undefined,
     });
   }
 
@@ -487,4 +511,5 @@ document.addEventListener('keydown', e => {
 });
 
 /* ===== 初期描画 ===== */
+removeOldCompletedTasks();
 render();
